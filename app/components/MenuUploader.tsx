@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import DishCard from "./DishCard";
 import { DishCardSkeleton } from "./DishCardSkeleton";
 import { LocationChip } from "./LocationChip";
+import { RestaurantConfirmation } from "./RestaurantConfirmation";
 import { compressImage } from "@/app/lib/compress-image";
 import { useLocation } from "@/app/hooks/useLocation";
 import type { Dish } from "@/app/types/menu";
@@ -12,6 +13,7 @@ type AppState =
   | { status: "idle" }
   | { status: "reading" }
   | { status: "parsing" }
+  | { status: "confirming"; dishes: Dish[]; restaurantName: string | null }
   | { status: "success"; dishes: Dish[]; restaurantName: string | null }
   | { status: "error"; message: string };
 
@@ -95,12 +97,9 @@ export default function MenuUploader() {
       }
       const dishes: Dish[] = data.dishes;
       const restaurantName: string | null = data.restaurant_name ?? null;
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ dishes, restaurantName }));
-      } catch {
-        // Storage quota or private-browsing restriction — not fatal.
-      }
-      setState({ status: "success", dishes, restaurantName });
+      // Pause for the user to confirm (or correct) the restaurant name
+      // before showing dish cards and kicking off photo searches.
+      setState({ status: "confirming", dishes, restaurantName });
     } catch {
       setState({
         status: "error",
@@ -115,6 +114,15 @@ export default function MenuUploader() {
     e.target.value = "";
   }
 
+  function handleRestaurantConfirm(restaurantName: string | null) {
+    if (state.status !== "confirming") return;
+    const { dishes } = state;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ dishes, restaurantName }));
+    } catch { /* ignore */ }
+    setState({ status: "success", dishes, restaurantName });
+  }
+
   function resetScan() {
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -123,6 +131,7 @@ export default function MenuUploader() {
   }
 
   const isBusy = state.status === "reading" || state.status === "parsing";
+  const isConfirming = state.status === "confirming";
   const isSuccess = state.status === "success";
 
   const stepLabel =
@@ -154,8 +163,8 @@ export default function MenuUploader() {
         className="sr-only"
       />
 
-      {/* Upload buttons — hidden once results are showing */}
-      {!isSuccess && (
+      {/* Upload buttons — hidden once confirming or showing results */}
+      {!isSuccess && !isConfirming && (
         <>
           <button
             type="button"
@@ -202,6 +211,15 @@ export default function MenuUploader() {
         >
           {state.message}
         </div>
+      )}
+
+      {/* Restaurant name confirmation */}
+      {isConfirming && (
+        <RestaurantConfirmation
+          restaurantName={state.restaurantName}
+          dishCount={state.dishes.length}
+          onConfirm={handleRestaurantConfirm}
+        />
       )}
 
       {/* Skeletons while loading */}
