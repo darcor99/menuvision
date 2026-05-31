@@ -1,74 +1,102 @@
 "use client";
 
 import { useState } from "react";
+import DishCard from "./DishCard";
+import type { Dish } from "@/app/types/menu";
 
-type OcrState =
+type AppState =
   | { status: "idle" }
-  | { status: "loading" }
-  | { status: "success"; text: string }
+  | { status: "reading" }
+  | { status: "parsing" }
+  | { status: "success"; dishes: Dish[] }
   | { status: "error"; message: string };
 
-const MAX_CLIENT_BYTES = 10 * 1024 * 1024; // 10 MB — mirrors API limit
+const MAX_CLIENT_BYTES = 10 * 1024 * 1024;
+
+const STEP_LABELS: Record<string, string> = {
+  reading: "Reading menu…",
+  parsing: "Identifying dishes…",
+};
 
 export default function MenuUploader() {
-  const [ocr, setOcr] = useState<OcrState>({ status: "idle" });
+  const [state, setState] = useState<AppState>({ status: "idle" });
 
   async function handleFile(file: File) {
     if (file.size > MAX_CLIENT_BYTES) {
-      setOcr({
+      setState({
         status: "error",
         message: "File too large. Please use an image under 10 MB.",
       });
       return;
     }
 
-    setOcr({ status: "loading" });
-
-    const body = new FormData();
-    body.append("image", file);
-
+    // Step 1: OCR
+    setState({ status: "reading" });
+    let ocrText: string;
     try {
+      const body = new FormData();
+      body.append("image", file);
       const res = await fetch("/api/ocr", { method: "POST", body });
       const data = await res.json();
-
       if (!res.ok) {
-        setOcr({ status: "error", message: data.error ?? "Something went wrong." });
-      } else {
-        setOcr({ status: "success", text: data.text });
+        setState({ status: "error", message: data.error ?? "OCR failed." });
+        return;
       }
+      ocrText = data.text;
     } catch {
-      setOcr({ status: "error", message: "Network error. Please try again." });
+      setState({ status: "error", message: "Network error during OCR. Please try again." });
+      return;
+    }
+
+    // Step 2: Parse dishes
+    setState({ status: "parsing" });
+    try {
+      const res = await fetch("/api/parse-menu", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: ocrText }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setState({ status: "error", message: data.error ?? "Menu parsing failed." });
+        return;
+      }
+      setState({ status: "success", dishes: data.dishes });
+    } catch {
+      setState({ status: "error", message: "Network error during parsing. Please try again." });
     }
   }
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
-    // Reset so the same file can trigger onChange again
     e.target.value = "";
   }
 
-  const isLoading = ocr.status === "loading";
+  const isBusy = state.status === "reading" || state.status === "parsing";
+  const stepLabel = isBusy ? STEP_LABELS[state.status] : null;
 
   return (
     <div className="flex w-full max-w-md flex-col gap-4">
       {/* Camera capture */}
       <label
         htmlFor="camera-input"
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-foreground px-6 py-8 text-background transition active:scale-[0.98] ${isLoading ? "pointer-events-none opacity-60" : ""}`}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl bg-foreground px-6 py-8 text-background transition active:scale-[0.98] ${isBusy ? "pointer-events-none opacity-60" : ""}`}
       >
-        <span className="text-2xl">{isLoading ? "⏳" : "📷"}</span>
+        <span className="text-2xl">{isBusy ? "⏳" : "📷"}</span>
         <span className="text-base font-semibold">
-          {isLoading ? "Reading menu…" : "Take a photo"}
+          {stepLabel ?? "Take a photo"}
         </span>
-        <span className="text-xs opacity-70">Use your camera</span>
+        <span className="text-xs opacity-70">
+          {isBusy ? "This may take a few seconds" : "Use your camera"}
+        </span>
         <input
           id="camera-input"
           type="file"
           accept="image/*"
           capture="environment"
           onChange={onFileChange}
-          disabled={isLoading}
+          disabled={isBusy}
           className="sr-only"
         />
       </label>
@@ -76,7 +104,7 @@ export default function MenuUploader() {
       {/* File upload */}
       <label
         htmlFor="upload-input"
-        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-foreground/15 px-6 py-8 transition active:scale-[0.98] ${isLoading ? "pointer-events-none opacity-60" : ""}`}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-foreground/15 px-6 py-8 transition active:scale-[0.98] ${isBusy ? "pointer-events-none opacity-60" : ""}`}
       >
         <span className="text-2xl">🖼️</span>
         <span className="text-base font-semibold">Upload an image</span>
@@ -88,29 +116,30 @@ export default function MenuUploader() {
           type="file"
           accept="image/*"
           onChange={onFileChange}
-          disabled={isLoading}
+          disabled={isBusy}
           className="sr-only"
         />
       </label>
 
-      {/* OCR result / error */}
-      {ocr.status === "error" && (
+      {/* Error */}
+      {state.status === "error" && (
         <div
           role="alert"
           className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
         >
-          {ocr.message}
+          {state.message}
         </div>
       )}
 
-      {ocr.status === "success" && (
-        <div className="flex flex-col gap-2">
+      {/* Dish cards */}
+      {state.status === "success" && (
+        <div className="flex flex-col gap-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-foreground/40">
-            Raw OCR output
+            {state.dishes.length} dish{state.dishes.length !== 1 ? "es" : ""} found
           </p>
-          <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap break-words rounded-2xl border border-foreground/10 bg-foreground/[0.03] p-4 font-mono text-xs leading-relaxed text-foreground/80">
-            {ocr.text}
-          </pre>
+          {state.dishes.map((dish, i) => (
+            <DishCard key={i} dish={dish} />
+          ))}
         </div>
       )}
     </div>
