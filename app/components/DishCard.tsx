@@ -5,8 +5,8 @@ import type { Dish } from "@/app/types/menu";
 
 type PhotoState =
   | { status: "idle" }
-  | { status: "loading" }
-  | { status: "open"; urls: string[] }
+  | { status: "loading"; step: "searching" | "generating" }
+  | { status: "open"; urls: string[]; source: "real" | "ai" }
   | { status: "error"; message: string };
 
 export default function DishCard({ dish }: { dish: Dish }) {
@@ -21,7 +21,6 @@ export default function DishCard({ dish }: { dish: Dish }) {
     dish.english_name !== dish.name &&
     dish.english_name !== dish.original_language_name;
 
-  // Prefer english_name for image search — better results than romanized/foreign names
   const searchName = dish.english_name || dish.name;
 
   async function togglePhotos() {
@@ -31,16 +30,47 @@ export default function DishCard({ dish }: { dish: Dish }) {
     }
     if (photos.status === "loading") return;
 
-    setPhotos({ status: "loading" });
+    // Step 1 — try real photos
+    setPhotos({ status: "loading", step: "searching" });
+
+    let realUrls: string[] = [];
     try {
       const res = await fetch(
         `/api/dish-image?name=${encodeURIComponent(searchName)}`
       );
+      if (res.ok) {
+        const data = await res.json();
+        realUrls = data.urls ?? [];
+      }
+    } catch {
+      // network blip — fall through to generation
+    }
+
+    if (realUrls.length >= 2) {
+      setPhotos({ status: "open", urls: realUrls, source: "real" });
+      return;
+    }
+
+    // Step 2 — fewer than 2 real photos, fall back to AI generation
+    setPhotos({ status: "loading", step: "generating" });
+    try {
+      const res = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: searchName,
+          description: dish.short_description,
+        }),
+      });
       const data = await res.json();
       if (!res.ok) {
-        setPhotos({ status: "error", message: data.error ?? "Could not load photos." });
+        setPhotos({
+          status: "error",
+          message: data.error ?? "Could not load or generate a photo.",
+        });
       } else {
-        setPhotos({ status: "open", urls: data.urls });
+        const dataUrl = `data:image/png;base64,${data.b64_json}`;
+        setPhotos({ status: "open", urls: [dataUrl], source: "ai" });
       }
     } catch {
       setPhotos({ status: "error", message: "Network error. Please try again." });
@@ -49,13 +79,14 @@ export default function DishCard({ dish }: { dish: Dish }) {
 
   const buttonLabel =
     photos.status === "loading"
-      ? "Loading…"
+      ? photos.step === "generating"
+        ? "Generating preview…"
+        : "Finding photos…"
       : photos.status === "open"
       ? "Hide photos"
       : "Show photos";
 
   return (
-    // overflow-hidden lets the photo strip bleed to card edges cleanly
     <div className="overflow-hidden rounded-2xl border border-foreground/10 bg-background shadow-sm">
       <div className="p-5">
         {/* Name row */}
@@ -101,7 +132,7 @@ export default function DishCard({ dish }: { dish: Dish }) {
           </div>
         )}
 
-        {/* Show/hide photos button */}
+        {/* Toggle button */}
         <button
           onClick={togglePhotos}
           disabled={photos.status === "loading"}
@@ -110,7 +141,7 @@ export default function DishCard({ dish }: { dish: Dish }) {
           {buttonLabel}
         </button>
 
-        {/* Photo fetch error */}
+        {/* Error */}
         {photos.status === "error" && (
           <p className="mt-2 text-center text-xs text-red-500 dark:text-red-400">
             {photos.message}
@@ -118,22 +149,40 @@ export default function DishCard({ dish }: { dish: Dish }) {
         )}
       </div>
 
-      {/* Photo carousel — bleeds edge to edge inside the card */}
+      {/* Carousel */}
       {photos.status === "open" && (
-        <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto px-5 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {photos.urls.map((url, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={i}
-              src={url}
-              alt={`${searchName} photo ${i + 1}`}
-              className="h-52 w-[85%] shrink-0 snap-start rounded-xl object-cover"
-              onError={(e) => {
-                e.currentTarget.parentElement?.removeChild(e.currentTarget);
-              }}
-            />
-          ))}
-        </div>
+        <>
+          {/* Source label */}
+          <div className="flex items-center gap-1.5 px-5 pb-2 text-xs text-foreground/40">
+            {photos.source === "real" ? (
+              <>
+                <span aria-hidden>📷</span>
+                <span>Real photos</span>
+              </>
+            ) : (
+              <>
+                <span aria-hidden>✨</span>
+                <span>AI-generated preview — may not reflect the actual dish</span>
+              </>
+            )}
+          </div>
+
+          {/* Scrollable strip — bleeds edge to edge */}
+          <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto px-5 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {photos.urls.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={url}
+                alt={`${searchName} ${photos.source === "ai" ? "AI-generated preview" : `photo ${i + 1}`}`}
+                className="h-52 w-[85%] shrink-0 snap-start rounded-xl object-cover"
+                onError={(e) => {
+                  e.currentTarget.parentElement?.removeChild(e.currentTarget);
+                }}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
