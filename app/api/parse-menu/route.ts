@@ -4,7 +4,7 @@ import type { Dish } from "@/app/types/menu";
 
 export const maxDuration = 30;
 
-const SYSTEM_PROMPT = `You are a menu parsing assistant. Given raw OCR text from a restaurant menu, extract every dish and return a JSON object.
+const BASE_PROMPT = `You are a menu parsing assistant. Given raw OCR text from a restaurant menu, extract every dish and return a JSON object.
 
 Return this exact shape: { "dishes": Dish[] }
 
@@ -17,6 +17,16 @@ Each Dish object must have:
 - price: string | null — price as printed (e.g. "12.50" or "$12.50"); null if not visible
 
 Only output valid JSON. No markdown, no commentary.`;
+
+function buildPrompt(location?: string) {
+  if (!location) return BASE_PROMPT;
+  return (
+    BASE_PROMPT +
+    `\n\nContext: the user is at a restaurant in ${location}. ` +
+    `Use this to improve dish name translations, identify regional specialities, ` +
+    `and describe local ingredients or cooking styles accurately.`
+  );
+}
 
 export async function POST(request: NextRequest) {
   const { allowed, remaining, resetInMs } = checkRateLimit(getIp(request), "parse-menu");
@@ -33,7 +43,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { text?: string };
+  let body: { text?: string; location?: string };
   try {
     body = await request.json();
   } catch {
@@ -44,6 +54,8 @@ export async function POST(request: NextRequest) {
   if (!text) {
     return NextResponse.json({ error: "No OCR text provided." }, { status: 400 });
   }
+
+  const location = body.location?.trim() || undefined;
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -65,7 +77,7 @@ export async function POST(request: NextRequest) {
         model: "gpt-4o-mini",
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: buildPrompt(location) },
           { role: "user", content: text },
         ],
       }),

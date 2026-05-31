@@ -3,7 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import DishCard from "./DishCard";
 import { DishCardSkeleton } from "./DishCardSkeleton";
+import { LocationChip } from "./LocationChip";
 import { compressImage } from "@/app/lib/compress-image";
+import { useLocation } from "@/app/hooks/useLocation";
 import type { Dish } from "@/app/types/menu";
 
 type AppState =
@@ -19,12 +21,13 @@ const SKELETON_COUNT = 4;
 
 export default function MenuUploader() {
   const [state, setState] = useState<AppState>({ status: "idle" });
-  // useRef-based inputs + programmatic .click() is more reliable than
-  // <label htmlFor> on Android Chrome and some Android WebViews.
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
 
-  // Restore the last scan so a refresh doesn't lose work.
+  // Geolocation — starts detecting on mount, resolves in the background.
+  const { status: locStatus, label: locLabel, setLabel: setLocLabel } =
+    useLocation();
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -47,7 +50,6 @@ export default function MenuUploader() {
       return;
     }
 
-    // Compress client-side (≤1600 px, JPEG 88 %) before the round-trip.
     const compressed = await compressImage(file);
 
     // Step 1 — OCR
@@ -71,13 +73,16 @@ export default function MenuUploader() {
       return;
     }
 
-    // Step 2 — Parse dishes
+    // Step 2 — Parse dishes, passing location as AI context
     setState({ status: "parsing" });
     try {
       const res = await fetch("/api/parse-menu", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: ocrText }),
+        body: JSON.stringify({
+          text: ocrText,
+          location: locLabel || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -88,7 +93,7 @@ export default function MenuUploader() {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(dishes));
       } catch {
-        // Storage quota exceeded or private-browsing restriction — not fatal.
+        // Storage quota or private-browsing restriction — not fatal.
       }
       setState({ status: "success", dishes });
     } catch {
@@ -102,7 +107,6 @@ export default function MenuUploader() {
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
-    // Reset value so picking the same file again fires onChange.
     e.target.value = "";
   }
 
@@ -125,10 +129,6 @@ export default function MenuUploader() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-4">
-      {/*
-        Hidden file inputs — kept out of the visual flow but not display:none
-        so programmatic .click() works reliably across Android Chrome / iOS Safari.
-      */}
       <input
         ref={cameraRef}
         type="file"
@@ -179,6 +179,13 @@ export default function MenuUploader() {
               Choose a menu photo from your device
             </span>
           </button>
+
+          {/* Location chip — shown once geolocation has started */}
+          <LocationChip
+            status={locStatus}
+            label={locLabel}
+            onChange={setLocLabel}
+          />
         </>
       )}
 
@@ -207,6 +214,12 @@ export default function MenuUploader() {
       {/* Dish cards */}
       {isSuccess && (
         <div className="flex flex-col gap-3">
+          {/* Location context shown above results */}
+          <LocationChip
+            status={locStatus}
+            label={locLabel}
+            onChange={setLocLabel}
+          />
           <p className="text-xs font-semibold uppercase tracking-wider text-foreground/40">
             {state.dishes.length} dish{state.dishes.length !== 1 ? "es" : ""} found
           </p>
