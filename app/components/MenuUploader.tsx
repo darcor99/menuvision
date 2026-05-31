@@ -12,7 +12,7 @@ type AppState =
   | { status: "idle" }
   | { status: "reading" }
   | { status: "parsing" }
-  | { status: "success"; dishes: Dish[] }
+  | { status: "success"; dishes: Dish[]; restaurantName: string | null }
   | { status: "error"; message: string };
 
 const MAX_CLIENT_BYTES = 10 * 1024 * 1024;
@@ -32,9 +32,13 @@ export default function MenuUploader() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
-      const dishes = JSON.parse(raw) as Dish[];
+      const saved = JSON.parse(raw) as
+        | { dishes: Dish[]; restaurantName: string | null }
+        | Dish[]; // handle old format
+      const dishes = Array.isArray(saved) ? saved : saved.dishes;
+      const restaurantName = Array.isArray(saved) ? null : saved.restaurantName;
       if (Array.isArray(dishes) && dishes.length > 0) {
-        setState({ status: "success", dishes });
+        setState({ status: "success", dishes, restaurantName });
       }
     } catch {
       // Corrupt storage — ignore and start fresh.
@@ -90,12 +94,13 @@ export default function MenuUploader() {
         return;
       }
       const dishes: Dish[] = data.dishes;
+      const restaurantName: string | null = data.restaurant_name ?? null;
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(dishes));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ dishes, restaurantName }));
       } catch {
         // Storage quota or private-browsing restriction — not fatal.
       }
-      setState({ status: "success", dishes });
+      setState({ status: "success", dishes, restaurantName });
     } catch {
       setState({
         status: "error",
@@ -214,7 +219,12 @@ export default function MenuUploader() {
       {/* Dish cards */}
       {isSuccess && (
         <div className="flex flex-col gap-3">
-          {/* Location context shown above results */}
+          {/* Restaurant name + location context */}
+          {state.restaurantName && (
+            <p className="text-base font-semibold text-foreground">
+              {state.restaurantName}
+            </p>
+          )}
           <LocationChip
             status={locStatus}
             label={locLabel}
@@ -224,7 +234,7 @@ export default function MenuUploader() {
             {state.dishes.length} dish{state.dishes.length !== 1 ? "es" : ""} found
           </p>
           {state.dishes.map((dish, i) => (
-            <DishCard key={i} dish={dish} />
+            <DishCard key={i} dish={dish} restaurantName={state.restaurantName} />
           ))}
           <button
             type="button"

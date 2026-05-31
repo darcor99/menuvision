@@ -5,6 +5,27 @@ export const maxDuration = 20;
 
 const cache = new Map<string, string[]>();
 
+async function searchImages(query: string, apiKey: string): Promise<string[]> {
+  const url = new URL("https://serpapi.com/search.json");
+  url.searchParams.set("engine", "google_images");
+  url.searchParams.set("q", query);
+  url.searchParams.set("api_key", apiKey);
+
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    const results: { thumbnail?: string; original?: string }[] =
+      data.images_results ?? [];
+    return results
+      .slice(0, 3)
+      .map((r) => r.thumbnail ?? r.original)
+      .filter((u): u is string => Boolean(u));
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(request: NextRequest) {
   const { allowed, remaining, resetInMs } = checkRateLimit(getIp(request), "dish-image");
   if (!allowed) {
@@ -25,7 +46,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing dish name." }, { status: 400 });
   }
 
-  const cacheKey = name.toLowerCase();
+  const restaurant = request.nextUrl.searchParams.get("restaurant")?.trim() || null;
+
+  // Cache key includes restaurant so we don't serve generic results for a
+  // restaurant-specific lookup (or vice versa) on a cache hit.
+  const cacheKey = restaurant
+    ? `${restaurant.toLowerCase()}:${name.toLowerCase()}`
+    : name.toLowerCase();
+
   if (cache.has(cacheKey)) {
     return NextResponse.json({ urls: cache.get(cacheKey) });
   }
@@ -38,35 +66,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const searchUrl = new URL("https://serpapi.com/search.json");
-  searchUrl.searchParams.set("engine", "google_images");
-  searchUrl.searchParams.set("q", name);
-  searchUrl.searchParams.set("api_key", apiKey);
+  let urls: string[] = [];
 
-  let serpRes: Response;
-  try {
-    serpRes = await fetch(searchUrl.toString());
-  } catch {
-    return NextResponse.json(
-      { error: "Could not reach SerpAPI. Check your network." },
-      { status: 502 }
-    );
+  // Try restaurant-specific search first — gives photos of the actual dish
+  // at this restaurant rather than generic stock images.
+  if (restaurant) {
+    urls = await searchImages(`${name} ${restaurant}`, apiKey);
   }
 
-  const data = await serpRes.json();
-
-  if (!serpRes.ok) {
-    const message: string = data?.error ?? "SerpAPI returned an error.";
-    return NextResponse.json({ error: message }, { status: 502 });
+  // Fall back to generic dish name if we didn't get enough results.
+  if (urls.length < 2) {
+    const genericUrls = await searchImages(name, apiKey);
+    // Keep whichever set has more results.
+    if (genericUrls.length > urls.length) {
+      urls = genericUrls;
+    }
   }
-
-  const results: { thumbnail?: string; original?: string }[] =
-    data.images_results ?? [];
-
-  const urls = results
-    .slice(0, 3)
-    .map((r) => r.thumbnail ?? r.original)
-    .filter((u): u is string => Boolean(u));
 
   if (urls.length === 0) {
     return NextResponse.json({ error: "No images found." }, { status: 404 });

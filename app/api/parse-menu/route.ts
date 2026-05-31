@@ -6,7 +6,13 @@ export const maxDuration = 30;
 
 const BASE_PROMPT = `You are a menu parsing assistant. Given raw OCR text from a restaurant menu, extract every dish and return a JSON object.
 
-Return this exact shape: { "dishes": Dish[] }
+Return this exact shape:
+{
+  "restaurant_name": string | null,
+  "dishes": Dish[]
+}
+
+restaurant_name: the restaurant name exactly as printed on the menu, or null if not found.
 
 Each Dish object must have:
 - name: string — dish name exactly as it appears on the menu
@@ -96,7 +102,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  let parsed: { dishes: Dish[] };
+  let parsed: { restaurant_name?: string | null; dishes: Dish[] };
   try {
     const content: string = data.choices[0].message.content;
     parsed = JSON.parse(content);
@@ -109,7 +115,10 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json(
-    { dishes: parsed.dishes },
+    {
+      restaurant_name: parsed.restaurant_name ?? null,
+      dishes: parsed.dishes,
+    },
     { headers: { "X-RateLimit-Remaining": String(remaining) } }
   );
 }

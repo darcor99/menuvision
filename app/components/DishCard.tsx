@@ -9,7 +9,13 @@ type PhotoState =
   | { status: "open"; urls: string[]; source: "real" | "ai" }
   | { status: "error"; message: string };
 
-export default function DishCard({ dish }: { dish: Dish }) {
+export default function DishCard({
+  dish,
+  restaurantName,
+}: {
+  dish: Dish;
+  restaurantName?: string | null;
+}) {
   const [photos, setPhotos] = useState<PhotoState>({ status: "idle" });
 
   const showOriginal =
@@ -35,9 +41,9 @@ export default function DishCard({ dish }: { dish: Dish }) {
 
     let realUrls: string[] = [];
     try {
-      const res = await fetch(
-        `/api/dish-image?name=${encodeURIComponent(searchName)}`
-      );
+      const params = new URLSearchParams({ name: searchName });
+      if (restaurantName) params.set("restaurant", restaurantName);
+      const res = await fetch(`/api/dish-image?${params}`);
       if (res.ok) {
         const data = await res.json();
         realUrls = data.urls ?? [];
