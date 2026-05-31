@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, getIp } from "@/app/lib/rate-limit";
 import type { Dish } from "@/app/types/menu";
+
+export const maxDuration = 30;
 
 const SYSTEM_PROMPT = `You are a menu parsing assistant. Given raw OCR text from a restaurant menu, extract every dish and return a JSON object.
 
@@ -16,6 +19,20 @@ Each Dish object must have:
 Only output valid JSON. No markdown, no commentary.`;
 
 export async function POST(request: NextRequest) {
+  const { allowed, remaining, resetInMs } = checkRateLimit(getIp(request), "parse-menu");
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a minute and try again." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(resetInMs / 1000)),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
+  }
+
   let body: { text?: string };
   try {
     body = await request.json();
@@ -79,5 +96,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ dishes: parsed.dishes });
+  return NextResponse.json(
+    { dishes: parsed.dishes },
+    { headers: { "X-RateLimit-Remaining": String(remaining) } }
+  );
 }

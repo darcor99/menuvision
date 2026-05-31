@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, getIp } from "@/app/lib/rate-limit";
+
+export const maxDuration = 30;
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(request: NextRequest) {
-  // Parse multipart form data
+  const { allowed, remaining, resetInMs } = checkRateLimit(getIp(request), "ocr");
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a minute and try again." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(resetInMs / 1000)),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -23,7 +39,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Convert to base64 for Vision API
   const bytes = await file.arrayBuffer();
   const base64 = Buffer.from(bytes).toString("base64");
 
@@ -35,7 +50,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Call Google Cloud Vision text detection
   let visionRes: Response;
   try {
     visionRes = await fetch(
@@ -79,6 +93,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // First annotation is the full concatenated text
-  return NextResponse.json({ text: annotations[0].description });
+  return NextResponse.json(
+    { text: annotations[0].description },
+    { headers: { "X-RateLimit-Remaining": String(remaining) } }
+  );
 }

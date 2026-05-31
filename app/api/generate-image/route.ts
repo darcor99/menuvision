@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, getIp } from "@/app/lib/rate-limit";
 
-// Module-level cache — keyed by lowercased dish name
+export const maxDuration = 60;
+
 const cache = new Map<string, string>();
 
 export async function POST(request: NextRequest) {
+  const { allowed, remaining, resetInMs } = checkRateLimit(getIp(request), "generate-image");
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a minute and try again." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(resetInMs / 1000)),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
+  }
+
   let body: { name?: string; description?: string };
   try {
     body = await request.json();
@@ -73,5 +89,8 @@ export async function POST(request: NextRequest) {
   }
 
   cache.set(cacheKey, b64_json);
-  return NextResponse.json({ b64_json });
+  return NextResponse.json(
+    { b64_json },
+    { headers: { "X-RateLimit-Remaining": String(remaining) } }
+  );
 }

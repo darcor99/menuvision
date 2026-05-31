@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, getIp } from "@/app/lib/rate-limit";
 
-// Module-level cache — survives across requests within the same server process
+export const maxDuration = 20;
+
 const cache = new Map<string, string[]>();
 
 export async function GET(request: NextRequest) {
+  const { allowed, remaining, resetInMs } = checkRateLimit(getIp(request), "dish-image");
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a minute and try again." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil(resetInMs / 1000)),
+          "X-RateLimit-Remaining": "0",
+        },
+      }
+    );
+  }
+
   const name = request.nextUrl.searchParams.get("name")?.trim();
   if (!name) {
     return NextResponse.json({ error: "Missing dish name." }, { status: 400 });
@@ -57,5 +73,8 @@ export async function GET(request: NextRequest) {
   }
 
   cache.set(cacheKey, urls);
-  return NextResponse.json({ urls });
+  return NextResponse.json(
+    { urls },
+    { headers: { "X-RateLimit-Remaining": String(remaining) } }
+  );
 }
