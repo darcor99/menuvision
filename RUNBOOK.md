@@ -24,6 +24,30 @@ npm start            # serve the compiled output on http://localhost:3000
 
 Stop with **Ctrl + C**.
 
+### ⚠️ After any code change — full restart required
+
+Leaving the dev server running across code changes causes stale `.next`
+chunk errors (`Cannot find module './948.js'`). Always do a clean
+restart after edits:
+
+```bash
+# 1. Kill any running Next.js process
+pkill -9 -f "next"
+
+# 2. Clear the build cache
+rm -rf .next
+
+# 3. Start fresh
+npm run dev -- --port 3000
+```
+
+Then confirm it's up before opening the browser:
+
+```bash
+curl -s http://localhost:3000 -o /dev/null -w "%{http_code}"
+# should print 200
+```
+
 ### Check the port is free before starting
 
 ```bash
