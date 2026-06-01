@@ -41,18 +41,20 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const name = request.nextUrl.searchParams.get("name")?.trim();
+  const name       = request.nextUrl.searchParams.get("name")?.trim()       || null;
+  const restaurant = request.nextUrl.searchParams.get("restaurant")?.trim() || null;
+  const location   = request.nextUrl.searchParams.get("location")?.trim()   || null;
+
   if (!name) {
     return NextResponse.json({ error: "Missing dish name." }, { status: 400 });
   }
 
-  const restaurant = request.nextUrl.searchParams.get("restaurant")?.trim() || null;
-
-  // Cache key includes restaurant so we don't serve generic results for a
-  // restaurant-specific lookup (or vice versa) on a cache hit.
-  const cacheKey = restaurant
-    ? `${restaurant.toLowerCase()}:${name.toLowerCase()}`
-    : name.toLowerCase();
+  // Cache key encodes all available context so different combinations are
+  // stored independently and never cross-contaminate.
+  const cacheKey = [location, restaurant, name]
+    .filter(Boolean)
+    .map((s) => s!.toLowerCase())
+    .join(":");
 
   if (cache.has(cacheKey)) {
     return NextResponse.json({ urls: cache.get(cacheKey) });
@@ -60,27 +62,22 @@ export async function GET(request: NextRequest) {
 
   const apiKey = process.env.SERP_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(
-      { error: "SerpAPI key not configured." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "SerpAPI key not configured." }, { status: 500 });
   }
 
-  let urls: string[] = [];
+  // Attempt 1 — most specific: dish + restaurant + city
+  // e.g. "Beef Burger The Ivy Dublin, Ireland"
+  const specificQuery = [name, restaurant, location].filter(Boolean).join(" ");
+  let urls = await searchImages(specificQuery, apiKey);
 
-  // Try restaurant-specific search first — gives photos of the actual dish
-  // at this restaurant rather than generic stock images.
-  if (restaurant) {
-    urls = await searchImages(`${name} ${restaurant}`, apiKey);
-  }
-
-  // Fall back to generic dish name if we didn't get enough results.
-  if (urls.length < 2) {
-    const genericUrls = await searchImages(name, apiKey);
-    // Keep whichever set has more results.
-    if (genericUrls.length > urls.length) {
-      urls = genericUrls;
-    }
+  // Attempt 2 — drop restaurant, keep city
+  // e.g. "Beef Burger Dublin, Ireland"
+  // Only runs if attempt 1 didn't have enough AND we actually have a location
+  // to make this query meaningfully different from attempt 1.
+  if (urls.length < 2 && location && restaurant) {
+    const cityQuery = [name, location].filter(Boolean).join(" ");
+    const cityUrls = await searchImages(cityQuery, apiKey);
+    if (cityUrls.length > urls.length) urls = cityUrls;
   }
 
   if (urls.length === 0) {

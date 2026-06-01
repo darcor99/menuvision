@@ -252,7 +252,12 @@ export default function MenuUploader() {
             {state.dishes.length} dish{state.dishes.length !== 1 ? "es" : ""} found
           </p>
           {state.dishes.map((dish, i) => (
-            <DishCard key={i} dish={dish} restaurantName={state.restaurantName} />
+            <DishCard
+              key={i}
+              dish={dish}
+              restaurantName={state.restaurantName}
+              location={locLabel || null}
+            />
           ))}
           <button
             type="button"

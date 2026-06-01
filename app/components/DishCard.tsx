@@ -12,9 +12,11 @@ type PhotoState =
 export default function DishCard({
   dish,
   restaurantName,
+  location,
 }: {
   dish: Dish;
   restaurantName?: string | null;
+  location?: string | null;
 }) {
   const [photos, setPhotos] = useState<PhotoState>({ status: "idle" });
 
@@ -43,6 +45,7 @@ export default function DishCard({
     try {
       const params = new URLSearchParams({ name: searchName });
       if (restaurantName) params.set("restaurant", restaurantName);
+      if (location)       params.set("location", location);
       const res = await fetch(`/api/dish-image?${params}`);
       if (res.ok) {
         const data = await res.json();
