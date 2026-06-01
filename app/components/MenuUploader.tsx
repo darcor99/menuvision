@@ -25,6 +25,7 @@ export default function MenuUploader() {
   const [state, setState] = useState<AppState>({ status: "idle" });
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const lastFileRef = useRef<File | null>(null);
 
   // Geolocation — starts detecting on mount, resolves in the background.
   const { status: locStatus, label: locLabel, setLabel: setLocLabel } =
@@ -48,6 +49,7 @@ export default function MenuUploader() {
   }, []);
 
   async function handleFile(file: File) {
+    lastFileRef.current = file;
     const compressed = await compressImage(file);
 
     if (compressed.size > MAX_CLIENT_BYTES) {
@@ -209,7 +211,15 @@ export default function MenuUploader() {
           role="alert"
           className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
         >
-          {state.message}
+          <p>{state.message}</p>
+          {lastFileRef.current && (
+            <button
+              onClick={() => handleFile(lastFileRef.current!)}
+              className="mt-3 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-400 dark:hover:bg-red-900/60"
+            >
+              Try again
+            </button>
+          )}
         </div>
       )}
 
