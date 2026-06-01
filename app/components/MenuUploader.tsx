@@ -48,15 +48,15 @@ export default function MenuUploader() {
   }, []);
 
   async function handleFile(file: File) {
-    if (file.size > MAX_CLIENT_BYTES) {
+    const compressed = await compressImage(file);
+
+    if (compressed.size > MAX_CLIENT_BYTES) {
       setState({
         status: "error",
         message: "File too large. Please use an image under 10 MB.",
       });
       return;
     }
-
-    const compressed = await compressImage(file);
 
     // Step 1 — OCR
     setState({ status: "reading" });
