@@ -26,7 +26,7 @@ async function searchImages(query: string, apiKey: string): Promise<string[]> {
     const results: { thumbnail?: string; original?: string }[] =
       data.images_results ?? [];
     return results
-      .slice(0, 3)
+      .slice(0, 6)
       .map((r) => r.thumbnail ?? r.original)
       .filter((u): u is string => Boolean(u));
   } catch {
