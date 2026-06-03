@@ -60,9 +60,10 @@ function tryParseLine(line: string): ParsedLine | null {
   try {
     const raw = JSON.parse(line) as Record<string, unknown>;
     if ("restaurant_name" in raw) {
+      const n = raw.restaurant_name;
       return {
         restaurant_name:
-          typeof raw.restaurant_name === "string" ? raw.restaurant_name : null,
+          typeof n === "string" && n !== "null" && n !== "" ? n : null,
       };
     }
     if (typeof raw.name === "string") {

@@ -334,7 +334,6 @@ export default function MenuUploader() {
       {isConfirming && (
         <RestaurantConfirmation
           restaurantName={state.restaurantName}
-          dishCount={state.dishes.length}
           onConfirm={handleRestaurantConfirm}
         />
       )}
