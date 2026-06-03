@@ -6,6 +6,7 @@ import { DishCardSkeleton } from "./DishCardSkeleton";
 import { LocationChip } from "./LocationChip";
 import { RestaurantConfirmation } from "./RestaurantConfirmation";
 import { Button } from "@/components/ui/button";
+import { Camera, ImageUp, Loader2 } from "lucide-react";
 import { compressImage } from "@/app/lib/compress-image";
 import { useLocation } from "@/app/hooks/useLocation";
 import type { Dish } from "@/app/types/menu";
@@ -277,7 +278,9 @@ export default function MenuUploader() {
             disabled={isBusy}
             className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-8 text-primary-foreground transition active:scale-[0.98] disabled:opacity-60"
           >
-            <span className="text-2xl">{isBusy ? "⏳" : "📷"}</span>
+            {isBusy
+              ? <Loader2 className="h-6 w-6 animate-spin" />
+              : <Camera className="h-6 w-6" />}
             <span className="text-base font-semibold">
               {stepLabel ?? "Take a photo"}
             </span>
@@ -292,7 +295,7 @@ export default function MenuUploader() {
             disabled={isBusy}
             className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-border px-6 py-8 transition hover:bg-muted active:scale-[0.98] disabled:opacity-60"
           >
-            <span className="text-2xl">🖼️</span>
+            <ImageUp className="h-6 w-6" />
             <span className="text-base font-semibold">Upload an image</span>
             <span className="text-xs text-muted-foreground">
               Choose a menu photo from your device

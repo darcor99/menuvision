@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { MapPin } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { LocationStatus } from "@/app/hooks/useLocation";
 
@@ -33,8 +34,9 @@ export function LocationChip({ status, label, onChange }: Props) {
 
   if (status === "detecting") {
     return (
-      <p className="animate-pulse text-xs text-muted-foreground">
-        📍 Detecting location…
+      <p className="flex animate-pulse items-center gap-1.5 text-xs text-muted-foreground">
+        <MapPin className="h-3 w-3 shrink-0" />
+        Detecting location…
       </p>
     );
   }
@@ -42,7 +44,7 @@ export function LocationChip({ status, label, onChange }: Props) {
   if (editing) {
     return (
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-xs">📍</span>
+        <MapPin className="h-3 w-3 shrink-0 text-muted-foreground" />
         <Input
           ref={inputRef}
           value={draft}
@@ -78,7 +80,7 @@ export function LocationChip({ status, label, onChange }: Props) {
       onClick={startEdit}
       className="flex items-center gap-1.5 text-left text-xs text-muted-foreground transition hover:text-foreground/70"
     >
-      <span className="shrink-0">📍</span>
+      <MapPin className="h-3 w-3 shrink-0" />
       <span>{label || "Add location (optional)"}</span>
       <span className="shrink-0 text-muted-foreground/50">· edit</span>
     </button>

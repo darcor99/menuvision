@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Camera, Sparkles } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -181,12 +182,12 @@ export default function DishCard({
           <div className="flex items-center gap-1.5 px-5 pb-2 text-xs text-muted-foreground">
             {photos.source === "real" ? (
               <>
-                <span aria-hidden>📷</span>
+                <Camera className="h-3 w-3 shrink-0" />
                 <span>Real photos</span>
               </>
             ) : (
               <>
-                <span aria-hidden>✨</span>
+                <Sparkles className="h-3 w-3 shrink-0" />
                 <span>AI-generated preview — may not reflect the actual dish</span>
               </>
             )}
