@@ -4,7 +4,7 @@ export default function Home() {
   return (
     <main className="flex min-h-dvh flex-col items-center gap-8 bg-background px-6 py-10">
       <header className="flex w-full max-w-md flex-col items-center text-center">
-        <span className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground/5 text-3xl">
+        <span className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-3xl">
           🍽️
         </span>
         <h1 className="text-3xl font-bold tracking-tight">MenuVision</h1>

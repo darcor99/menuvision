@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
-  let parsed: { restaurant_name?: string | null; dishes: Dish[] };
+  let parsed: { restaurant_name?: string | null; dishes: unknown[] };
   try {
     const content: string = data.choices[0].message.content;
     parsed = JSON.parse(content);
@@ -114,10 +114,30 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const dishes: Dish[] = parsed.dishes.map((d: unknown) => {
+    const raw = (d ?? {}) as Record<string, unknown>;
+    return {
+      name: typeof raw.name === "string" ? raw.name : "",
+      original_language_name:
+        typeof raw.original_language_name === "string"
+          ? raw.original_language_name
+          : null,
+      english_name:
+        typeof raw.english_name === "string" ? raw.english_name : "",
+      short_description:
+        typeof raw.short_description === "string" ? raw.short_description : "",
+      key_ingredients: Array.isArray(raw.key_ingredients)
+        ? (raw.key_ingredients as unknown[])
+            .filter((x): x is string => typeof x === "string")
+        : [],
+      price: typeof raw.price === "string" ? raw.price : null,
+    };
+  });
+
   return NextResponse.json(
     {
       restaurant_name: parsed.restaurant_name ?? null,
-      dishes: parsed.dishes,
+      dishes,
     },
     { headers: { "X-RateLimit-Remaining": String(remaining) } }
   );

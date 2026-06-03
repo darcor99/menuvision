@@ -3,7 +3,15 @@ import { checkRateLimit, getIp } from "@/app/lib/rate-limit";
 
 export const maxDuration = 60;
 
+const CACHE_MAX = 100; // base64 PNGs are ~1-2 MB each; cap memory use
 const cache = new Map<string, string>();
+
+function cacheSet(key: string, value: string) {
+  if (cache.size >= CACHE_MAX) {
+    cache.delete(cache.keys().next().value!);
+  }
+  cache.set(key, value);
+}
 
 export async function POST(request: NextRequest) {
   const { allowed, remaining, resetInMs } = checkRateLimit(getIp(request), "generate-image");
@@ -88,7 +96,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  cache.set(cacheKey, b64_json);
+  cacheSet(cacheKey, b64_json);
   return NextResponse.json(
     { b64_json },
     { headers: { "X-RateLimit-Remaining": String(remaining) } }

@@ -3,7 +3,15 @@ import { checkRateLimit, getIp } from "@/app/lib/rate-limit";
 
 export const maxDuration = 20;
 
+const CACHE_MAX = 500;
 const cache = new Map<string, string[]>();
+
+function cacheSet(key: string, value: string[]) {
+  if (cache.size >= CACHE_MAX) {
+    cache.delete(cache.keys().next().value!);
+  }
+  cache.set(key, value);
+}
 
 async function searchImages(query: string, apiKey: string): Promise<string[]> {
   const url = new URL("https://serpapi.com/search.json");
@@ -84,7 +92,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No images found." }, { status: 404 });
   }
 
-  cache.set(cacheKey, urls);
+  cacheSet(cacheKey, urls);
   return NextResponse.json(
     { urls },
     { headers: { "X-RateLimit-Remaining": String(remaining) } }

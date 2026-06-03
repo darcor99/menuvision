@@ -2,26 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    /* Warm amber/food palette — HSL channel format for Tailwind opacity modifiers */
+    --background: 40 30% 98%;
+    --foreground: 20 14% 12%;
+    --card: 40 20% 97%;
+    --card-foreground: 20 14% 12%;
+    --popover: 40 20% 97%;
+    --popover-foreground: 20 14% 12%;
+    --primary: 27 85% 50%;
+    --primary-foreground: 40 30% 98%;
+    --secondary: 30 15% 92%;
+    --secondary-foreground: 20 14% 25%;
+    --muted: 30 12% 93%;
+    --muted-foreground: 25 10% 45%;
+    --accent: 28 70% 92%;
+    --accent-foreground: 27 70% 32%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 30 15% 87%;
+    --input: 30 15% 87%;
+    --ring: 27 85% 50%;
+    --radius: 0.875rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 20 14% 8%;
+      --foreground: 40 15% 94%;
+      --card: 20 12% 11%;
+      --card-foreground: 40 15% 94%;
+      --popover: 20 12% 11%;
+      --popover-foreground: 40 15% 94%;
+      --primary: 28 80% 58%;
+      --primary-foreground: 20 14% 8%;
+      --secondary: 20 12% 18%;
+      --secondary-foreground: 40 12% 80%;
+      --muted: 20 12% 18%;
+      --muted-foreground: 30 8% 58%;
+      --accent: 27 40% 22%;
+      --accent-foreground: 28 70% 72%;
+      --destructive: 0 72% 51%;
+      --destructive-foreground: 0 0% 98%;
+      --border: 20 10% 22%;
+      --input: 20 10% 22%;
+      --ring: 28 80% 58%;
+    }
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
   }
 }

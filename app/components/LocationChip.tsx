@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { Input } from "@/components/ui/input";
 import type { LocationStatus } from "@/app/hooks/useLocation";
 
 type Props = {
@@ -32,7 +33,7 @@ export function LocationChip({ status, label, onChange }: Props) {
 
   if (status === "detecting") {
     return (
-      <p className="animate-pulse text-xs text-foreground/40">
+      <p className="animate-pulse text-xs text-muted-foreground">
         📍 Detecting location…
       </p>
     );
@@ -42,7 +43,7 @@ export function LocationChip({ status, label, onChange }: Props) {
     return (
       <div className="flex items-center gap-2">
         <span className="shrink-0 text-xs">📍</span>
-        <input
+        <Input
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -51,19 +52,19 @@ export function LocationChip({ status, label, onChange }: Props) {
             if (e.key === "Escape") setEditing(false);
           }}
           placeholder="e.g. Tokyo, Japan"
-          className="min-w-0 flex-1 rounded-lg border border-foreground/15 bg-transparent px-2.5 py-1.5 text-xs outline-none focus:border-foreground/40"
+          className="h-7 min-w-0 flex-1 text-xs"
         />
         <button
           type="button"
           onClick={confirm}
-          className="shrink-0 text-xs font-medium text-foreground/60 transition hover:text-foreground"
+          className="shrink-0 text-xs font-medium text-muted-foreground transition hover:text-foreground"
         >
           Done
         </button>
         <button
           type="button"
           onClick={() => setEditing(false)}
-          className="shrink-0 text-xs text-foreground/35 transition hover:text-foreground/60"
+          className="shrink-0 text-xs text-muted-foreground/60 transition hover:text-muted-foreground"
         >
           Cancel
         </button>
@@ -75,11 +76,11 @@ export function LocationChip({ status, label, onChange }: Props) {
     <button
       type="button"
       onClick={startEdit}
-      className="flex items-center gap-1.5 text-left text-xs text-foreground/45 transition hover:text-foreground/70"
+      className="flex items-center gap-1.5 text-left text-xs text-muted-foreground transition hover:text-foreground/70"
     >
       <span className="shrink-0">📍</span>
       <span>{label || "Add location (optional)"}</span>
-      <span className="shrink-0 text-foreground/25">· edit</span>
+      <span className="shrink-0 text-muted-foreground/50">· edit</span>
     </button>
   );
 }

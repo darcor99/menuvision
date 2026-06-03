@@ -5,6 +5,7 @@ import DishCard from "./DishCard";
 import { DishCardSkeleton } from "./DishCardSkeleton";
 import { LocationChip } from "./LocationChip";
 import { RestaurantConfirmation } from "./RestaurantConfirmation";
+import { Button } from "@/components/ui/button";
 import { compressImage } from "@/app/lib/compress-image";
 import { useLocation } from "@/app/hooks/useLocation";
 import type { Dish } from "@/app/types/menu";
@@ -27,7 +28,6 @@ export default function MenuUploader() {
   const uploadRef = useRef<HTMLInputElement>(null);
   const lastFileRef = useRef<File | null>(null);
 
-  // Geolocation — starts detecting on mount, resolves in the background.
   const { status: locStatus, label: locLabel, setLabel: setLocLabel } =
     useLocation();
 
@@ -37,7 +37,7 @@ export default function MenuUploader() {
       if (!raw) return;
       const saved = JSON.parse(raw) as
         | { dishes: Dish[]; restaurantName: string | null }
-        | Dish[]; // handle old format
+        | Dish[];
       const dishes = Array.isArray(saved) ? saved : saved.dishes;
       const restaurantName = Array.isArray(saved) ? null : saved.restaurantName;
       if (Array.isArray(dishes) && dishes.length > 0) {
@@ -66,9 +66,16 @@ export default function MenuUploader() {
     try {
       const body = new FormData();
       body.append("image", compressed);
-      const res = await fetch("/api/ocr", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 30_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/ocr", { method: "POST", body, signal: ac.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+      const data = await res!.json();
+      if (!res!.ok) {
         setState({ status: "error", message: data.error ?? "OCR failed." });
         return;
       }
@@ -81,26 +88,32 @@ export default function MenuUploader() {
       return;
     }
 
-    // Step 2 — Parse dishes, passing location as AI context
+    // Step 2 — Parse dishes
     setState({ status: "parsing" });
     try {
-      const res = await fetch("/api/parse-menu", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: ocrText,
-          location: locLabel || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 30_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/parse-menu", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: ocrText,
+            location: locLabel || undefined,
+          }),
+          signal: ac.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      const data = await res!.json();
+      if (!res!.ok) {
         setState({ status: "error", message: data.error ?? "Menu parsing failed." });
         return;
       }
       const dishes: Dish[] = data.dishes;
       const restaurantName: string | null = data.restaurant_name ?? null;
-      // Pause for the user to confirm (or correct) the restaurant name
-      // before showing dish cards and kicking off photo searches.
       setState({ status: "confirming", dishes, restaurantName });
     } catch {
       setState({
@@ -165,14 +178,14 @@ export default function MenuUploader() {
         className="sr-only"
       />
 
-      {/* Upload buttons — hidden once confirming or showing results */}
+      {/* Upload buttons */}
       {!isSuccess && !isConfirming && (
         <>
           <button
             type="button"
             onClick={() => cameraRef.current?.click()}
             disabled={isBusy}
-            className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl bg-foreground px-6 py-8 text-background transition active:scale-[0.98] disabled:opacity-60"
+            className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-8 text-primary-foreground transition active:scale-[0.98] disabled:opacity-60"
           >
             <span className="text-2xl">{isBusy ? "⏳" : "📷"}</span>
             <span className="text-base font-semibold">
@@ -187,16 +200,15 @@ export default function MenuUploader() {
             type="button"
             onClick={() => uploadRef.current?.click()}
             disabled={isBusy}
-            className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-foreground/15 px-6 py-8 transition active:scale-[0.98] disabled:opacity-60"
+            className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl border border-border px-6 py-8 transition hover:bg-muted active:scale-[0.98] disabled:opacity-60"
           >
             <span className="text-2xl">🖼️</span>
             <span className="text-base font-semibold">Upload an image</span>
-            <span className="text-xs text-foreground/50">
+            <span className="text-xs text-muted-foreground">
               Choose a menu photo from your device
             </span>
           </button>
 
-          {/* Location chip — shown once geolocation has started */}
           <LocationChip
             status={locStatus}
             label={locLabel}
@@ -209,16 +221,18 @@ export default function MenuUploader() {
       {state.status === "error" && (
         <div
           role="alert"
-          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-400"
+          className="rounded-2xl border border-destructive/25 bg-destructive/8 p-4 text-sm text-destructive"
         >
           <p>{state.message}</p>
           {lastFileRef.current && (
-            <button
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => handleFile(lastFileRef.current!)}
-              className="mt-3 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-400 dark:hover:bg-red-900/60"
+              className="mt-3 border-destructive/30 text-destructive hover:bg-destructive/10"
             >
               Try again
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -235,7 +249,7 @@ export default function MenuUploader() {
       {/* Skeletons while loading */}
       {isBusy && (
         <div className="flex flex-col gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wider text-foreground/40">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {stepLabel}
           </p>
           {Array.from({ length: SKELETON_COUNT }, (_, i) => (
@@ -247,7 +261,6 @@ export default function MenuUploader() {
       {/* Dish cards */}
       {isSuccess && (
         <div className="flex flex-col gap-3">
-          {/* Restaurant name + location context */}
           {state.restaurantName && (
             <p className="text-base font-semibold text-foreground">
               {state.restaurantName}
@@ -258,24 +271,24 @@ export default function MenuUploader() {
             label={locLabel}
             onChange={setLocLabel}
           />
-          <p className="text-xs font-semibold uppercase tracking-wider text-foreground/40">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {state.dishes.length} dish{state.dishes.length !== 1 ? "es" : ""} found
           </p>
-          {state.dishes.map((dish, i) => (
+          {state.dishes.map((dish) => (
             <DishCard
-              key={i}
+              key={dish.name}
               dish={dish}
               restaurantName={state.restaurantName}
               location={locLabel || null}
             />
           ))}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             onClick={resetScan}
-            className="mt-2 w-full rounded-2xl border border-foreground/15 py-4 text-sm font-medium text-foreground/60 transition hover:bg-foreground/5 active:scale-[0.98]"
+            className="mt-2 w-full"
           >
             Scan another menu
-          </button>
+          </Button>
         </div>
       )}
     </div>

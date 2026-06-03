@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import type { Dish } from "@/app/types/menu";
 
 type PhotoState =
   | { status: "idle" }
   | { status: "loading"; step: "searching" | "generating" }
-  | { status: "open"; urls: string[]; source: "real" | "ai" }
+  | { status: "open"; urls: string[]; broken: Set<string>; source: "real" | "ai" }
   | { status: "error"; message: string };
 
 export default function DishCard({
@@ -46,40 +49,54 @@ export default function DishCard({
       const params = new URLSearchParams({ name: searchName });
       if (restaurantName) params.set("restaurant", restaurantName);
       if (location)       params.set("location", location);
-      const res = await fetch(`/api/dish-image?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        realUrls = data.urls ?? [];
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 15_000);
+      try {
+        const res = await fetch(`/api/dish-image?${params}`, { signal: ac.signal });
+        if (res.ok) {
+          const data = await res.json();
+          realUrls = data.urls ?? [];
+        }
+      } finally {
+        clearTimeout(timer);
       }
     } catch {
-      // network blip — fall through to generation
+      // network blip or timeout — fall through to generation
     }
 
     if (realUrls.length >= 2) {
-      setPhotos({ status: "open", urls: realUrls, source: "real" });
+      setPhotos({ status: "open", urls: realUrls, broken: new Set(), source: "real" });
       return;
     }
 
     // Step 2 — fewer than 2 real photos, fall back to AI generation
     setPhotos({ status: "loading", step: "generating" });
     try {
-      const res = await fetch("/api/generate-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: searchName,
-          description: dish.short_description,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 45_000);
+      let res: Response;
+      try {
+        res = await fetch("/api/generate-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: searchName,
+            description: dish.short_description,
+          }),
+          signal: ac.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      const data = await res!.json();
+      if (!res!.ok) {
         setPhotos({
           status: "error",
           message: data.error ?? "Could not load or generate a photo.",
         });
       } else {
         const dataUrl = `data:image/png;base64,${data.b64_json}`;
-        setPhotos({ status: "open", urls: [dataUrl], source: "ai" });
+        setPhotos({ status: "open", urls: [dataUrl], broken: new Set(), source: "ai" });
       }
     } catch {
       setPhotos({ status: "error", message: "Network error. Please try again." });
@@ -96,8 +113,8 @@ export default function DishCard({
       : "Show photos";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-foreground/10 bg-background shadow-sm">
-      <div className="p-5">
+    <Card className="overflow-hidden rounded-2xl">
+      <CardContent className="p-5">
         {/* Name row */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-0.5">
@@ -105,25 +122,25 @@ export default function DishCard({
               {dish.name}
             </h2>
             {showOriginal && (
-              <p className="text-xs text-foreground/45">
+              <p className="text-xs text-muted-foreground">
                 {dish.original_language_name}
               </p>
             )}
             {showEnglish && (
-              <p className="text-sm italic text-foreground/60">
+              <p className="text-sm italic text-muted-foreground">
                 {dish.english_name}
               </p>
             )}
           </div>
           {dish.price && (
-            <span className="mt-0.5 shrink-0 rounded-full bg-foreground/5 px-3 py-1 text-sm font-medium tabular-nums text-foreground">
+            <Badge variant="secondary" className="mt-0.5 shrink-0 tabular-nums">
               {dish.price}
-            </span>
+            </Badge>
           )}
         </div>
 
         {/* Description */}
-        <p className="mt-2.5 text-sm leading-relaxed text-foreground/70">
+        <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">
           {dish.short_description}
         </p>
 
@@ -131,38 +148,37 @@ export default function DishCard({
         {dish.key_ingredients.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {dish.key_ingredients.map((ing) => (
-              <span
-                key={ing}
-                className="rounded-full border border-foreground/10 px-2.5 py-0.5 text-xs text-foreground/55"
-              >
+              <Badge key={ing} variant="outline" className="font-normal">
                 {ing}
-              </span>
+              </Badge>
             ))}
           </div>
         )}
 
         {/* Toggle button */}
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={togglePhotos}
           disabled={photos.status === "loading"}
-          className="mt-4 w-full rounded-xl border border-foreground/10 py-2 text-sm font-medium text-foreground/55 transition hover:bg-foreground/5 active:scale-[0.98] disabled:opacity-50"
+          className="mt-4 w-full"
         >
           {buttonLabel}
-        </button>
+        </Button>
 
         {/* Error */}
         {photos.status === "error" && (
-          <p className="mt-2 text-center text-xs text-red-500 dark:text-red-400">
+          <p className="mt-2 text-center text-xs text-destructive">
             {photos.message}
           </p>
         )}
-      </div>
+      </CardContent>
 
       {/* Carousel */}
       {photos.status === "open" && (
         <>
           {/* Source label */}
-          <div className="flex items-center gap-1.5 px-5 pb-2 text-xs text-foreground/40">
+          <div className="flex items-center gap-1.5 px-5 pb-2 text-xs text-muted-foreground">
             {photos.source === "real" ? (
               <>
                 <span aria-hidden>📷</span>
@@ -176,23 +192,27 @@ export default function DishCard({
             )}
           </div>
 
-          {/* Scrollable strip — bleeds edge to edge */}
+          {/* Scrollable strip */}
           <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto px-5 pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {photos.urls.map((url, i) => (
+            {photos.urls.filter((url) => !photos.broken.has(url)).map((url, i) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                key={i}
+                key={url}
                 src={url}
                 alt={`${searchName} ${photos.source === "ai" ? "AI-generated preview" : `photo ${i + 1}`}`}
-                className="h-52 w-[85%] shrink-0 snap-start rounded-xl object-cover"
-                onError={(e) => {
-                  e.currentTarget.parentElement?.removeChild(e.currentTarget);
+                className="h-56 w-[85%] shrink-0 snap-start rounded-xl object-cover"
+                onError={() => {
+                  setPhotos((prev) =>
+                    prev.status === "open"
+                      ? { ...prev, broken: new Set([...prev.broken, url]) }
+                      : prev
+                  );
                 }}
               />
             ))}
           </div>
         </>
       )}
-    </div>
+    </Card>
   );
 }
