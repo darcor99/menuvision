@@ -6,7 +6,7 @@ import { DishCardSkeleton } from "./DishCardSkeleton";
 import { LocationChip } from "./LocationChip";
 import { RestaurantConfirmation } from "./RestaurantConfirmation";
 import { Button } from "@/components/ui/button";
-import { Camera, ImageUp, Loader2 } from "lucide-react";
+import { Camera, ImageUp, Loader2, ScanLine } from "lucide-react";
 import { compressImage } from "@/app/lib/compress-image";
 import { useLocation } from "@/app/hooks/useLocation";
 import type { Dish } from "@/app/types/menu";
@@ -353,6 +353,18 @@ export default function MenuUploader() {
       {/* Dish cards */}
       {isSuccess && (
         <div className="flex flex-col gap-3">
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={resetScan}
+              className="gap-1.5 text-muted-foreground"
+            >
+              <ScanLine className="h-4 w-4" />
+              Scan another menu
+            </Button>
+          </div>
+
           {state.restaurantName && (
             <p className="text-base font-semibold text-foreground">
               {state.restaurantName}
