@@ -1,11 +1,66 @@
 "use client";
 
 import { useState } from "react";
-import { Camera, Sparkles } from "lucide-react";
+import { Camera, Sparkles, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Dish } from "@/app/types/menu";
+
+// Common allergen keywords → display label (EU Big 14 + peanuts)
+const ALLERGENS: [string, string][] = [
+  // Dairy
+  ["milk", "dairy"], ["cream", "dairy"], ["butter", "dairy"], ["cheese", "dairy"],
+  ["yogurt", "dairy"], ["whey", "dairy"], ["casein", "dairy"], ["lactose", "dairy"],
+  ["mozzarella", "dairy"], ["parmesan", "dairy"], ["parmigiano", "dairy"],
+  ["pecorino", "dairy"], ["ricotta", "dairy"], ["mascarpone", "dairy"],
+  ["brie", "dairy"], ["cheddar", "dairy"], ["gouda", "dairy"],
+  // Eggs
+  ["egg", "eggs"],
+  // Gluten / Wheat
+  ["wheat", "gluten"], ["flour", "gluten"], ["bread", "gluten"],
+  ["pasta", "gluten"], ["spaghetti", "gluten"], ["noodle", "gluten"],
+  ["barley", "gluten"], ["rye", "gluten"], ["gluten", "gluten"],
+  ["crouton", "gluten"], ["breadcrumb", "gluten"],
+  // Peanuts
+  ["peanut", "peanuts"],
+  // Tree nuts
+  ["almond", "tree nuts"], ["walnut", "tree nuts"], ["cashew", "tree nuts"],
+  ["pistachio", "tree nuts"], ["hazelnut", "tree nuts"], ["pecan", "tree nuts"],
+  ["macadamia", "tree nuts"], ["pine nut", "tree nuts"], ["chestnut", "tree nuts"],
+  // Shellfish
+  ["shrimp", "shellfish"], ["prawn", "shellfish"], ["crab", "shellfish"],
+  ["lobster", "shellfish"], ["crayfish", "shellfish"], ["langoustine", "shellfish"],
+  // Fish
+  ["fish", "fish"], ["salmon", "fish"], ["tuna", "fish"], ["cod", "fish"],
+  ["anchovy", "fish"], ["sardine", "fish"], ["bass", "fish"], ["trout", "fish"],
+  ["halibut", "fish"], ["mackerel", "fish"], ["haddock", "fish"],
+  // Soy
+  ["soy", "soy"], ["soya", "soy"], ["tofu", "soy"], ["tempeh", "soy"], ["miso", "soy"],
+  ["edamame", "soy"],
+  // Sesame
+  ["sesame", "sesame"], ["tahini", "sesame"],
+  // Sulphites (wine, vinegar)
+  ["wine", "sulphites"], ["sulphite", "sulphites"], ["sulfite", "sulphites"],
+  ["vinegar", "sulphites"],
+  // Celery
+  ["celery", "celery"],
+  // Mustard
+  ["mustard", "mustard"],
+  // Lupin
+  ["lupin", "lupin"],
+  // Molluscs
+  ["squid", "molluscs"], ["octopus", "molluscs"], ["oyster", "molluscs"],
+  ["mussel", "molluscs"], ["clam", "molluscs"], ["scallop", "molluscs"],
+];
+
+function detectAllergen(ingredient: string): string | null {
+  const lower = ingredient.toLowerCase();
+  for (const [keyword, label] of ALLERGENS) {
+    if (lower.includes(keyword)) return label;
+  }
+  return null;
+}
 
 type PhotoState =
   | { status: "idle" }
@@ -148,11 +203,24 @@ export default function DishCard({
         {/* Ingredients */}
         {dish.key_ingredients.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {dish.key_ingredients.map((ing) => (
-              <Badge key={ing} variant="outline" className="font-normal">
-                {ing}
-              </Badge>
-            ))}
+            {dish.key_ingredients.map((ing) => {
+              const allergen = detectAllergen(ing);
+              return allergen ? (
+                <Badge
+                  key={ing}
+                  variant="outline"
+                  title={`Contains ${allergen}`}
+                  className="gap-1 border-orange-300 font-normal text-orange-600 dark:border-orange-700 dark:text-orange-400"
+                >
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  {ing}
+                </Badge>
+              ) : (
+                <Badge key={ing} variant="outline" className="font-normal">
+                  {ing}
+                </Badge>
+              );
+            })}
           </div>
         )}
 
