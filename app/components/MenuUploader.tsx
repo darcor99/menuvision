@@ -27,6 +27,8 @@ export default function MenuUploader() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const lastFileRef = useRef<File | null>(null);
+  // Accumulates dishes across state transitions so confirm always has the full list
+  const dishesRef = useRef<Dish[]>([]);
 
   const { status: locStatus, label: locLabel, setLabel: setLocLabel } =
     useLocation();
@@ -50,6 +52,7 @@ export default function MenuUploader() {
 
   async function handleFile(file: File) {
     lastFileRef.current = file;
+    dishesRef.current = [];
     const compressed = await compressImage(file);
 
     if (compressed.size > MAX_CLIENT_BYTES) {
@@ -88,7 +91,7 @@ export default function MenuUploader() {
       return;
     }
 
-    // Step 2 — Parse dishes
+    // Step 2 — Stream parse: restaurant name arrives in ~1-2s, dishes pop in one-by-one
     setState({ status: "parsing" });
     try {
       const ac = new AbortController();
@@ -107,18 +110,104 @@ export default function MenuUploader() {
       } finally {
         clearTimeout(timer);
       }
-      const data = await res!.json();
+
       if (!res!.ok) {
+        const data = await res!.json();
         setState({ status: "error", message: data.error ?? "Menu parsing failed." });
         return;
       }
-      const dishes: Dish[] = data.dishes;
-      const restaurantName: string | null = data.restaurant_name ?? null;
-      setState({ status: "confirming", dishes, restaurantName });
+
+      const reader = res!.body!.getReader();
+      const decoder = new TextDecoder();
+      let lineBuffer = "";
+      let confirming = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        lineBuffer += decoder.decode(value, { stream: true });
+
+        const parts = lineBuffer.split("\n");
+        lineBuffer = parts.pop() ?? "";
+
+        for (const part of parts) {
+          const trimmed = part.trim();
+          if (!trimmed) continue;
+
+          let obj: Record<string, unknown>;
+          try {
+            obj = JSON.parse(trimmed) as Record<string, unknown>;
+          } catch {
+            continue; // skip malformed line
+          }
+
+          if (!confirming && "restaurant_name" in obj) {
+            // First line — restaurant name → transition to confirming immediately
+            confirming = true;
+            const restaurantName =
+              typeof obj.restaurant_name === "string" ? obj.restaurant_name : null;
+            setState({ status: "confirming", dishes: [], restaurantName });
+          } else if (typeof obj.name === "string") {
+            // Dish line — append to ref and update whichever display state is active
+            dishesRef.current = [...dishesRef.current, obj as unknown as Dish];
+
+            if (!confirming) {
+              // Model skipped restaurant_name — transition now
+              confirming = true;
+              setState({
+                status: "confirming",
+                dishes: dishesRef.current,
+                restaurantName: null,
+              });
+            } else {
+              setState((prev) => {
+                if (prev.status === "confirming" || prev.status === "success") {
+                  return { ...prev, dishes: dishesRef.current };
+                }
+                return prev;
+              });
+            }
+          }
+        }
+      }
+
+      // Flush any content not terminated by a newline
+      if (lineBuffer.trim()) {
+        let obj: Record<string, unknown>;
+        try {
+          obj = JSON.parse(lineBuffer.trim()) as Record<string, unknown>;
+          if (typeof obj.name === "string") {
+            dishesRef.current = [...dishesRef.current, obj as unknown as Dish];
+            setState((prev) => {
+              if (prev.status === "confirming" || prev.status === "success") {
+                return { ...prev, dishes: dishesRef.current };
+              }
+              return prev;
+            });
+          }
+        } catch { /* skip */ }
+      }
+
+      // If stream ended with nothing, show an error
+      if (!confirming) {
+        setState((prev) => {
+          if (prev.status === "parsing") {
+            return { status: "error", message: "No dishes found in this menu." };
+          }
+          return prev;
+        });
+      }
     } catch {
-      setState({
-        status: "error",
-        message: "Network error during parsing. Please try again.",
+      // Only override state if we haven't already started showing results
+      setState((prev) => {
+        if (prev.status === "parsing" || prev.status === "reading") {
+          return {
+            status: "error",
+            message: "Network error during parsing. Please try again.",
+          };
+        }
+        return prev;
       });
     }
   }
@@ -131,7 +220,8 @@ export default function MenuUploader() {
 
   function handleRestaurantConfirm(restaurantName: string | null) {
     if (state.status !== "confirming") return;
-    const { dishes } = state;
+    // Use ref to capture any dishes that arrived between renders
+    const dishes = dishesRef.current;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ dishes, restaurantName }));
     } catch { /* ignore */ }
@@ -237,7 +327,7 @@ export default function MenuUploader() {
         </div>
       )}
 
-      {/* Restaurant name confirmation */}
+      {/* Restaurant name confirmation — dish count ticks up live as stream arrives */}
       {isConfirming && (
         <RestaurantConfirmation
           restaurantName={state.restaurantName}
@@ -246,7 +336,7 @@ export default function MenuUploader() {
         />
       )}
 
-      {/* Skeletons while loading */}
+      {/* Skeletons while OCR / initial parse before first stream line */}
       {isBusy && (
         <div className="flex flex-col gap-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
