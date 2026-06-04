@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Dish } from "@/app/types/menu";
+import type { ImageMode } from "./MenuUploader";
 
 // Common allergen keywords → display label (EU Big 14 + peanuts)
 const ALLERGENS: [string, string][] = [
@@ -72,10 +73,12 @@ export default function DishCard({
   dish,
   restaurantName,
   location,
+  imageMode = "search",
 }: {
   dish: Dish;
   restaurantName?: string | null;
   location?: string | null;
+  imageMode?: ImageMode;
 }) {
   const [photos, setPhotos] = useState<PhotoState>({ status: "idle" });
 
@@ -97,7 +100,37 @@ export default function DishCard({
     }
     if (photos.status === "loading") return;
 
-    // Step 1 — try real photos
+    if (imageMode === "generate") {
+      // Skip Google — go straight to AI generation
+      setPhotos({ status: "loading", step: "generating" });
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 45_000);
+        let res: Response;
+        try {
+          res = await fetch("/api/generate-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: searchName, description: dish.short_description }),
+            signal: ac.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+        const data = await res!.json();
+        if (!res!.ok) {
+          setPhotos({ status: "error", message: data.error ?? "Could not generate a photo." });
+        } else {
+          const dataUrl = `data:image/png;base64,${data.b64_json}`;
+          setPhotos({ status: "open", urls: [dataUrl], broken: new Set(), source: "ai" });
+        }
+      } catch {
+        setPhotos({ status: "error", message: "Network error. Please try again." });
+      }
+      return;
+    }
+
+    // "search" mode — try Google first, fall back to AI if fewer than 2 results
     setPhotos({ status: "loading", step: "searching" });
 
     let realUrls: string[] = [];
@@ -125,7 +158,6 @@ export default function DishCard({
       return;
     }
 
-    // Step 2 — fewer than 2 real photos, fall back to AI generation
     setPhotos({ status: "loading", step: "generating" });
     try {
       const ac = new AbortController();
@@ -135,10 +167,7 @@ export default function DishCard({
         res = await fetch("/api/generate-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: searchName,
-            description: dish.short_description,
-          }),
+          body: JSON.stringify({ name: searchName, description: dish.short_description }),
           signal: ac.signal,
         });
       } finally {
@@ -146,10 +175,7 @@ export default function DishCard({
       }
       const data = await res!.json();
       if (!res!.ok) {
-        setPhotos({
-          status: "error",
-          message: data.error ?? "Could not load or generate a photo.",
-        });
+        setPhotos({ status: "error", message: data.error ?? "Could not load or generate a photo." });
       } else {
         const dataUrl = `data:image/png;base64,${data.b64_json}`;
         setPhotos({ status: "open", urls: [dataUrl], broken: new Set(), source: "ai" });

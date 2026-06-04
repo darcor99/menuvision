@@ -6,25 +6,68 @@ import { DishCardSkeleton } from "./DishCardSkeleton";
 import { LocationChip } from "./LocationChip";
 import { RestaurantConfirmation } from "./RestaurantConfirmation";
 import { Button } from "@/components/ui/button";
-import { Camera, ImageUp, Loader2, ScanLine } from "lucide-react";
+import { Camera, ImageUp, Loader2, ScanLine, Sparkles } from "lucide-react";
 import { compressImage } from "@/app/lib/compress-image";
 import { useLocation } from "@/app/hooks/useLocation";
 import type { Dish } from "@/app/types/menu";
+
+export type ImageMode = "search" | "generate";
 
 type AppState =
   | { status: "idle" }
   | { status: "reading" }
   | { status: "parsing" }
   | { status: "confirming"; dishes: Dish[]; restaurantName: string | null }
-  | { status: "success"; dishes: Dish[]; restaurantName: string | null }
+  | { status: "success"; dishes: Dish[]; restaurantName: string | null; imageMode: ImageMode }
   | { status: "error"; message: string };
 
 const MAX_CLIENT_BYTES = 10 * 1024 * 1024;
 const STORAGE_KEY = "menuvision_last_menu";
 const SKELETON_COUNT = 4;
 
+function ImageModeToggle({
+  value,
+  onChange,
+}: {
+  value: ImageMode;
+  onChange: (v: ImageMode) => void;
+}) {
+  return (
+    <div className="relative grid h-7 shrink-0 grid-cols-2 rounded-full border border-border bg-muted p-0.5">
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-full bg-background shadow-sm transition-transform duration-200 ease-in-out"
+        style={{ transform: value === "generate" ? "translateX(100%)" : "translateX(0)" }}
+      />
+      <button
+        type="button"
+        onClick={() => onChange("search")}
+        title="Google photos"
+        className={`relative z-10 flex items-center justify-center gap-1 rounded-full px-3.5 text-[0.8rem] font-medium transition-colors ${
+          value === "search" ? "text-foreground" : "text-muted-foreground"
+        }`}
+      >
+        <Camera className="h-3.5 w-3.5 shrink-0" />
+        Search
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("generate")}
+        title="AI generated"
+        className={`relative z-10 flex items-center justify-center gap-1 rounded-full px-3.5 text-[0.8rem] font-medium transition-colors ${
+          value === "generate" ? "text-foreground" : "text-muted-foreground"
+        }`}
+      >
+        <Sparkles className="h-3.5 w-3.5 shrink-0" />
+        AI
+      </button>
+    </div>
+  );
+}
+
 export default function MenuUploader() {
   const [state, setState] = useState<AppState>({ status: "idle" });
+  const [imageMode, setImageMode] = useState<ImageMode>("search");
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const lastFileRef = useRef<File | null>(null);
@@ -39,12 +82,14 @@ export default function MenuUploader() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const saved = JSON.parse(raw) as
-        | { dishes: Dish[]; restaurantName: string | null }
+        | { dishes: Dish[]; restaurantName: string | null; imageMode?: ImageMode }
         | Dish[];
       const dishes = Array.isArray(saved) ? saved : saved.dishes;
       const restaurantName = Array.isArray(saved) ? null : saved.restaurantName;
+      const savedMode: ImageMode = (!Array.isArray(saved) && saved.imageMode) ? saved.imageMode : "search";
       if (Array.isArray(dishes) && dishes.length > 0) {
-        setState({ status: "success", dishes, restaurantName });
+        setImageMode(savedMode);
+        setState({ status: "success", dishes, restaurantName, imageMode: savedMode });
       }
     } catch {
       // Corrupt storage — ignore and start fresh.
@@ -221,12 +266,25 @@ export default function MenuUploader() {
 
   function handleRestaurantConfirm(restaurantName: string | null) {
     if (state.status !== "confirming") return;
-    // Use ref to capture any dishes that arrived between renders
     const dishes = dishesRef.current;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ dishes, restaurantName }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ dishes, restaurantName, imageMode }));
     } catch { /* ignore */ }
-    setState({ status: "success", dishes, restaurantName });
+    setState({ status: "success", dishes, restaurantName, imageMode });
+  }
+
+  function handleImageModeChange(mode: ImageMode) {
+    setImageMode(mode);
+    if (state.status === "success") {
+      setState({ ...state, imageMode: mode });
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...saved, imageMode: mode }));
+        }
+      } catch { /* ignore */ }
+    }
   }
 
   function resetScan() {
@@ -353,7 +411,7 @@ export default function MenuUploader() {
       {/* Dish cards */}
       {isSuccess && (
         <div className="flex flex-col gap-3">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
             <Button
               variant="ghost"
               size="sm"
@@ -363,6 +421,7 @@ export default function MenuUploader() {
               <ScanLine className="h-4 w-4" />
               Scan another menu
             </Button>
+            <ImageModeToggle value={imageMode} onChange={handleImageModeChange} />
           </div>
 
           {state.restaurantName && (
@@ -384,6 +443,7 @@ export default function MenuUploader() {
               dish={dish}
               restaurantName={state.restaurantName}
               location={locLabel || null}
+              imageMode={imageMode}
             />
           ))}
           <Button
