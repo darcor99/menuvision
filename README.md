@@ -1,15 +1,17 @@
 # MenuVision
 
-Point your phone at a restaurant menu. MenuVision reads the text, identifies every dish, and shows you real photos (or an AI-generated preview when none are found) — all in a mobile-first web app.
+Point your phone at a restaurant menu. MenuVision reads the text, identifies every dish, translates it, flags allergens, and shows you a picture of each one — all in a mobile-first web app.
 
 ## Features
 
 - **OCR** — Google Cloud Vision extracts text from a photo or uploaded image
-- **Menu parsing** — GPT-4o-mini structures the raw text into typed dish objects (name, description, ingredients, price)
-- **Real photos** — SerpAPI fetches Google Images results per dish
-- **AI fallback** — when fewer than 2 real photos are found, `gpt-image-1` generates a food-photography preview
+- **Menu parsing** — GPT-4o-mini structures the raw text into typed dish objects (name, translation, description, ingredients, price), streamed back line-by-line so dishes appear one at a time
+- **Allergen detection** — ingredients are matched against a keyword map covering the EU "Big 14" allergens and flagged on each dish
+- **Image source toggle** — choose how dish photos are sourced per scan:
+  - **Search** — SerpAPI fetches real Google Images results per dish (falling back to AI generation if too few are found)
+  - **AI** — `gpt-image-1` generates a food-photography preview for every dish, skipping search entirely
 - **Client-side compression** — images are resized to ≤ 1600 px and re-encoded as JPEG before upload
-- **Offline-resilient** — last scanned menu is persisted in `localStorage`
+- **Offline-resilient** — last scanned menu (and your image-source choice) is persisted in `localStorage`
 - **Rate limiting** — 10 requests / minute / IP per API route (fixed window, in-memory)
 
 ## Local setup
@@ -67,7 +69,7 @@ SERP_API_KEY=...
 |---|---|---|---|
 | `/api/ocr` | POST | Multipart image → Google Vision text detection | 30 s |
 | `/api/parse-menu` | POST | Raw OCR text → GPT-4o-mini structured dish list | 30 s |
-| `/api/dish-image` | GET | Dish name → top 3 SerpAPI image URLs | 20 s |
+| `/api/dish-image` | GET | Dish name → up to 6 SerpAPI image URLs | 20 s |
 | `/api/generate-image` | POST | Dish name + description → gpt-image-1 b64 image | 60 s |
 
 ### In-memory caching
@@ -77,3 +79,7 @@ SERP_API_KEY=...
 ### Rate limiting
 
 Each route enforces a fixed-window limit of **10 requests / minute / IP** using a shared in-memory store (`app/lib/rate-limit.ts`). The same caveat applies: limits are per-instance, not global. For a distributed limit, use an edge KV store.
+
+## License
+
+Released under the [MIT License](LICENSE).
